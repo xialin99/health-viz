@@ -2,6 +2,37 @@
 from html import escape
 from calendar import Calendar
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
+
+METRIC_GUIDE = {
+    "心率": ("当天平均心率", "当天所有已记录读数的平均值，包含活动和休息时的读数。", "对比不同日期时，结合当天运动量一起看。"),
+    "静息心率": ("静息心率", "Apple Watch 估算你在休息时的每分钟心跳次数。", "用同一设备对比多天的记录，看看自己的平时水平。"),
+    "步数": ("步数", "手机和手表可能记录了同一段路，页面会分开列出。", "比较每天的步数时，尽量使用同一个设备的数据。"),
+    "步行与跑步距离": ("步行和跑步距离", "设备估算你当天走路和跑步的距离。", "手机和手表可能重复记录同一段路，两个距离不要相加。"),
+    "活动能量": ("活动消耗", "设备估算你因走路、运动等活动消耗的热量。", "用它对比不同日子的活动量，全天总消耗还包括休息时消耗的热量。"),
+    "锻炼时间": ("锻炼时长", "Apple Watch 计入「锻炼」圆环的活动分钟数。", "想看做了什么运动、几点开始，可以展开上面的「锻炼记录」。"),
+    "呼吸频率": ("呼吸次数", "有记录时，平均每分钟呼吸多少次。", "尽量比较相同情境下的记录，例如只对比睡眠时的读数。"),
+    "血氧饱和度": ("血氧", "反映血红蛋白携带氧气的比例。这里显示当天手表读数的平均值。", "手表读数供日常参考。主动测量时，把手臂放稳，保持手腕平放。"),
+    "心率变异性（SDNN）": ("心跳间隔变化（HRV）", "相邻两次心跳之间的时间会变动，这项指标用毫秒表示变动的幅度。", "尽量用同一设备、相近时段的读数观察自己的长期趋势。"),
+    "睡眠": ("睡眠时长", "设备记录的睡着时间。跨夜睡眠按各段记录结束的日期计入。", "结合实际入睡和醒来的时间看，留意设备是否漏记。"),
+    "体重": ("体重", "当天录入或同步的体重读数。", "想比较变化，可以在每天相近的时间用同一台秤记录。"),
+}
+UNIT_LABELS = {
+    "count/min": "次/分钟", "bpm": "次/分钟", "km": "公里", "mi": "英里",
+    "m": "米", "kcal": "千卡", "kJ": "千焦", "min": "分钟", "h": "小时",
+    "ms": "毫秒", "s": "秒", "kg": "公斤", "lb": "磅", "g": "克",
+}
+
+
+def metric_value(name, number, unit):
+    if name == "血氧饱和度" and unit == "%":
+        return f"{number * 100:.2f}".rstrip("0").rstrip(".") + "%"
+    if name == "睡眠" and unit == "分钟":
+        hours, minutes = divmod(int(Decimal(str(number)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)), 60)
+        return f"{hours} 小时 {minutes} 分钟" if hours else f"{minutes} 分钟"
+    label = "步" if name == "步数" and unit == "count" else UNIT_LABELS.get(unit, unit)
+    value = f"{number:,.2f}".rstrip("0").rstrip(".")
+    return f"{value} {label}".rstrip()
 
 STYLE = """
 .days a.cell{display:grid;place-items:center;text-decoration:none}.day-back{display:inline-block;margin-bottom:16px;color:var(--green);font-weight:700}.day-detail{margin-top:18px}.day-detail .panel h2{margin-bottom:6px}
@@ -276,13 +307,18 @@ def day_page(report, day):
         parts.append('<div>当天没有独立的锻炼记录。</div>')
     parts.append('</details></section><section class="panel detail-group"><h2>身体状态</h2>')
     for name, readings in body.items():
-        preview = f'{readings[0][1]:g} {readings[0][2]}' if len(readings) == 1 else "按来源查看"
-        parts.append(f'<details class="metric-detail"><summary>{escape(name)} · {escape(preview)}</summary>')
+        label, explanation, tip = METRIC_GUIDE.get(name, (name, "", ""))
+        preview = metric_value(name, *readings[0][1:3]) if len(readings) == 1 else "按设备或应用查看"
+        parts.append(f'<details class="metric-detail"><summary>{escape(label)} · {escape(preview)}</summary>')
+        if explanation:
+            parts.append(f'<p class="muted">{escape(explanation)}</p>')
         for method, number, unit, source, count in readings:
-            row = f"{method} · {number:g} {unit}".rstrip()
+            row = metric_value(name, number, unit)
             if source:
-                row += f" · {source}（{count} 条记录）"
+                row = f"{method} · {row} · {source}（{count} 条记录）"
             parts.append(f'<div>{escape(row)}</div>')
+        if tip:
+            parts.append(f'<p class="muted"><strong>建议</strong>　{escape(tip)}</p>')
         parts.append('</details>')
     if not body:
         parts.append('<p class="muted">当天没有可展示的身体状态记录。</p>')

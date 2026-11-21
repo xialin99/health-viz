@@ -62,7 +62,9 @@ def daily_details(data, sessions, wear):
         number = sum(values) if cumulative else sum(values) / len(values)
         if isfinite(number):
             days[day]["body"].setdefault(label, []).append([
-                "合计" if cumulative else "平均", round(number, 2), unit, source, len(values)
+                "合计" if cumulative else "平均",
+                round(number, 4 if key == "OxygenSaturation" and unit == "%" else 2),
+                unit, source, len(values)
             ])
 
     sleep = defaultdict(list)
