@@ -11,7 +11,7 @@
 import os, sys, json, tempfile, threading, webbrowser
 from datetime import date
 from urllib.parse import parse_qs, urlsplit
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -23,6 +23,7 @@ import render
 PORT = int(os.environ.get("PORT", 8765))
 
 STATE = {"status": "idle", "progress": "", "result": None, "error": ""}
+STATE_LOCK = threading.Lock()
 
 
 def run_analysis(zip_path):
@@ -51,6 +52,7 @@ def run_analysis(zip_path):
 
 
 class Handler(BaseHTTPRequestHandler):
+    timeout = 30
     def log_message(self, *a):
         pass
 
@@ -70,10 +72,11 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/status":
             self._send(json.dumps({k: v for k, v in STATE.items() if k != "result"}), "application/json")
         elif self.path == "/result":
-            if STATE["result"] is None:
+            report = STATE["result"]
+            if report is None:
                 self._send("<h1>还没有数据</h1><a href='/'>返回</a>", code=404)
             else:
-                self._send(render.result_page(STATE["result"]))
+                self._send(render.result_page(report))
         elif self.path.startswith(("/day/", "/day?")):
             report = STATE["result"]
             path = urlsplit(self.path)
@@ -88,10 +91,13 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send(render.day_page(report, day))
         elif self.path == "/reset":
-            if STATE["status"] == "parsing":
+            with STATE_LOCK:
+                busy = STATE["status"] in ("receiving", "parsing")
+                if not busy:
+                    STATE.update({"status": "idle", "progress": "", "result": None, "error": ""})
+            if busy:
                 self._send("请等待当前分析结束", code=409)
                 return
-            STATE.update({"status": "idle", "progress": "", "result": None, "error": ""})
             self.send_response(302)
             self.send_header("Location", "/")
             self.end_headers()
@@ -101,9 +107,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/upload":
             self._send("not found", code=404); return
-        if STATE["status"] == "parsing":
-            self._send("请等待当前分析结束", code=409)
-            return
         if self.headers.get("Content-Type") != "application/zip":
             self._send("请选择 ZIP 文件", code=415)
             return
@@ -113,6 +116,14 @@ class Handler(BaseHTTPRequestHandler):
             remaining = 0
         if not 0 < remaining <= 2 * 1024**3:
             self._send("ZIP 文件大小须在 0 至 2 GiB 之间", code=413)
+            return
+        with STATE_LOCK:
+            busy = STATE["status"] in ("receiving", "parsing")
+            if not busy:
+                previous = STATE.copy()
+                STATE.update(status="receiving", progress="正在接收 ZIP…", error="")
+        if busy:
+            self._send("请等待当前分析结束", code=409)
             return
         saved = None
         try:
@@ -126,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
                     output.write(block)
                     remaining -= len(block)
         except (OSError, ValueError):
+            with STATE_LOCK:
+                STATE.update(previous)
             if saved:
                 os.unlink(saved)
             self._send("未能接收完整 ZIP 文件", code=400)
@@ -137,11 +150,11 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     try:
-        server = HTTPServer(("127.0.0.1", PORT), Handler)
+        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError as error:
         if error.errno not in (48, 98, 10048):
             raise
-        server = HTTPServer(("127.0.0.1", 0), Handler)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     with server:
         url = "http://127.0.0.1:%d/" % server.server_port
         print("HealthViz: " + url, flush=True)
