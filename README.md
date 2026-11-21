@@ -17,6 +17,11 @@
 
 ---
 
+## 界面预览 · Preview
+
+![HealthViz 当前总览界面（示例数据） / Current dashboard with sample data](docs/screenshots/result.jpg)
+
+![身体状态日期选择（示例数据） / Body metrics date picker with sample data](docs/screenshots/body-date.jpg)
 
 ## 它做什么 · What it does
 
@@ -32,10 +37,13 @@
 
 **English**
 
-Extracts and visualizes two things from your iPhone Health export:
+Extracts and visualizes three groups of data from your iPhone Health export:
 
 - **Headphone listening** — how long each day, when during the day, longest single session, which days of the month
-- **Watch wearing** — hours per day, cumulative hours, days you skipped
+- **Apple Watch** — estimated wear windows based on recorded stand hours, plus workout records
+- **Body metrics** — daily readings with plain-language Chinese explanations and tips
+
+Select a heatmap date to open its daily details, or use the calendar and recent-date shortcuts under Body Metrics. Use the back link to return to the overview.
 
 ## 快速开始 · Quick start
 
@@ -50,6 +58,10 @@ python3 app.py
 **English**：A URL is printed in the terminal and your browser opens automatically. Drop the health export zip onto the page and wait for parsing.
 
 Windows：解压项目后，在资源管理器中双击 **Start HealthViz.cmd**。它会寻找 Python 3.8+，启动服务并自动打开默认浏览器。使用时保留启动窗口。
+
+macOS / Linux：安装 Python 3.8 或更新版本，在终端进入解压后的项目目录并运行 `python3 app.py`。无需登录。
+
+Download the current version from [GitHub](https://github.com/xialin99/health-viz/archive/refs/heads/master.zip).
 
 > 不需要 `pip install`，不需要 Docker，不需要数据库。Python 3.8+ 即可。
 > No `pip install`, no Docker, no database. Just Python 3.8+.
@@ -78,7 +90,6 @@ Windows：解压项目后，在资源管理器中双击 **Start HealthViz.cmd**�
 
 **English**: All parsing happens on your machine. The uploaded ZIP is deleted after processing. Parsing and charts run locally without a CDN.
 
-**Why you can trust this**: the whole project is ~500 lines of standard-library Python. Read it yourself.
 
 ## 项目结构 · Structure
 
@@ -113,6 +124,11 @@ health-viz/
 |---|---|
 | `HeadphoneAudioExposure` | 耳机聆听时长 / headphone listening time |
 | `AppleStandHour` | 手表佩戴时长 / watch wearing time |
+| `Workout`, `AppleExerciseTime` | 锻炼记录和时长 / workout sessions and exercise time |
+| `HeartRate`, `RestingHeartRate`, `HeartRateVariabilitySDNN` | 心率、静息心率和心跳间隔变化 / heart rate, resting heart rate and HRV |
+| `StepCount`, `DistanceWalkingRunning`, `ActiveEnergyBurned` | 步数、步行和跑步距离、活动消耗 / steps, walking and running distance, active energy |
+| `SleepAnalysis`, `BodyMass` | 睡眠和体重 / sleep and body weight |
+| `RespiratoryRate`, `OxygenSaturation` | 呼吸次数和血氧 / respiratory rate and blood oxygen |
 
 ## 常见问题 · FAQ
 
