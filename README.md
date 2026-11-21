@@ -1,77 +1,139 @@
+<div align="center">
+
 # HealthViz
 
-把你的 Apple Health 数据，变成一眼能看懂的可视化。
+**把你的 Apple Health 数据，变成一眼能看懂的可视化**
 
-**纯本地运行，零依赖，数据不上传任何服务器。**
+*Turn your Apple Health data into visualizations you can actually read*
 
-## 它做什么
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)]()
+
+**纯本地运行 · 零依赖 · 数据不上传任何服务器**
+*Runs locally · Zero dependencies · Nothing leaves your machine*
+
+</div>
+
+---
+
+![HealthViz 截图](docs/screenshots/result.jpg)
+
+## 它做什么 · What it does
+
+**中文**
 
 从 iPhone 健康 App 导出的数据里，提取并可视化：
 
-- **耳机聆听**：每天听了多久、什么时候听、单次最长多久、一个月里哪几天在听
-- **手表佩戴**：每天戴了几小时、累计戴了多久、哪些天没戴
+- **耳机聆听** — 每天听了多久、什么时候听、单次最长多久、一个月里哪几天在听
+- **手表佩戴** — 每天戴了几小时、累计戴了多久、哪些天没戴
 
-## 怎么用
+**English**
+
+Extracts and visualizes two things from your iPhone Health export:
+
+- **Headphone listening** — how long each day, when during the day, longest single session, which days of the month
+- **Watch wearing** — hours per day, cumulative hours, days you skipped
+
+## 快速开始 · Quick start
 
 ```bash
-# 1. 下载
-git clone <repo-url>
+git clone https://github.com/xialin99/health-viz.git
 cd health-viz
-
-# 2. 启动（不需要装任何依赖，Python 3.8+ 即可）
 python3 app.py
 ```
 
-终端会打印一个网址，浏览器自动打开。把健康数据 zip 拖进去，等解析完成，结果就出来了。
+**中文**：终端会打印一个网址，浏览器自动打开。把健康数据 zip 拖进去，等解析完成。
 
-## 导出健康数据
+**English**：A URL is printed in the terminal and your browser opens automatically. Drop the health export zip onto the page and wait for parsing.
+
+> 不需要 `pip install`，不需要 Docker，不需要数据库。Python 3.8+ 即可。
+> No `pip install`, no Docker, no database. Just Python 3.8+.
+
+## 怎么导出健康数据 · How to export
+
+**中文**
 
 1. iPhone 打开「健康」App
 2. 点右上角头像
 3. 拉到最下面，点「导出所有健康数据」
 4. 等几分钟，得到 `export.zip`（通常几十到几百 MB）
-5. 拖到页面里
+5. 拖到页面上
 
-## 数据安全
+**English**
 
-**所有解析都在你的机器上完成，不上传、不联网。**
+1. Open the **Health** app on iPhone
+2. Tap your **profile picture** (top right)
+3. Scroll to the bottom, tap **Export All Health Data**
+4. Wait a few minutes for `export.zip` (usually tens to hundreds of MB)
+5. Drop it onto the page
 
-项目只需要 Python 标准库，不引入任何第三方包——你可以自己读完全部源码确认这一点。
+## 数据安全 · Privacy
 
-## 项目结构
+**中文**：所有解析都在你的机器上完成。文件只存到临时目录，解析完立即删除。项目不发起任何网络请求（除了加载 ECharts 的 CDN）。
+
+**English**: All parsing happens on your machine. Files go to a temp directory and are deleted right after parsing. The project makes no network requests except loading ECharts from a CDN.
+
+**Why you can trust this**: the whole project is ~500 lines of standard-library Python. Read it yourself.
+
+## 项目结构 · Structure
 
 ```
 health-viz/
-├── app.py       # 启动服务、接收上传、调度分析
-├── parser.py    # 解析 Apple Health XML
-├── analyze.py   # 切分聆听会话、统计手表佩戴
-├── render.py    # 生成 HTML 页面
+├── app.py       # HTTP 服务、文件上传、任务调度  /  server, upload, dispatch
+├── parser.py    # 解析 Apple Health XML           /  parse the XML
+├── analyze.py   # 切分会话、统计佩戴               /  sessions & wear stats
+├── render.py    # 生成 HTML                       /  HTML rendering
+├── docs/        # 截图                            /  screenshots
+├── LICENSE      # MIT
 └── README.md
 ```
 
-## 支持的数据类型
+## 工作原理 · How it works
 
-| 健康数据类型 | 用途 |
+**中文**
+
+**耳机聆听**：健康数据里每条 `HeadphoneAudioExposure` 记录带开始/结束时间。把相邻间隔 ≤ 2 分钟的记录合并成一次「聆听会话」，累加时长。
+
+**手表佩戴**：用 `AppleStandHour` 反推。Apple Watch 每个整点记录一次「站没站」，只有戴上才记录。**有记录的小时 = 戴了**。这比用心率判断更准。
+
+**English**
+
+**Headphone listening**: each `HeadphoneAudioExposure` record carries start/end times. Records with gaps ≤ 2 minutes are merged into one "listening session", then durations are summed.
+
+**Watch wearing**: derived from `AppleStandHour`. Apple Watch logs a stand/idle event at every hour — only when worn. **An hour with a record means the watch was on the wrist.** This is more reliable than inferring from heart rate.
+
+## 支持的数据类型 · Supported data
+
+| 健康类型 / HealthKit type | 用途 / Purpose |
 |---|---|
-| `HeadphoneAudioExposure` | 耳机聆听时长 |
-| `AppleStandHour` | 手表佩戴时长（有记录=戴了） |
+| `HeadphoneAudioExposure` | 耳机聆听时长 / headphone listening time |
+| `AppleStandHour` | 手表佩戴时长 / watch wearing time |
 
-**为什么用手表站立记录判断佩戴？** 因为 Apple Watch 每个整点记录一次「站没站」，只有戴上才会记录。这比心率数据更直接。
+## 常见问题 · FAQ
 
-## 常见问题
+**Q: 解析很慢？ / Parsing is slow?**
 
-**Q：解析很慢？**
-A：健康数据 XML 通常几百 MB 到 1 GB+，完整解析需要几分钟，取决于你的机器和记录量。
+A: 健康数据 XML 通常几百 MB 到 1 GB+，完整解析需要几分钟，取决于记录量和机器性能。
 
-**Q：需要 Apple Watch 吗？**
-A：耳机数据只需要 iPhone。手表佩戴数据需要戴 Apple Watch。
+A: The XML is usually hundreds of MB to 1 GB+. Full parsing takes a few minutes depending on record count and hardware.
 
-**Q：数据会上传吗？**
-A：不会。全部在本地内存和临时目录处理，用完即删。
+**Q: 需要 Apple Watch 吗？ / Do I need an Apple Watch?**
 
-**Q：支持 Windows / macOS / Linux 吗？**
-A：都支持，只要装了 Python 3.8+。
+A: 耳机数据只需要 iPhone。手表佩戴数据需要戴 Apple Watch。
 
-## 许可证
+A: Headphone data only needs an iPhone. Watch-wearing data requires an Apple Watch.
 
-MIT
+**Q: 支持 Windows / macOS / Linux 吗？ / Which platforms?**
+
+A: 都支持，只要装了 Python 3.8+。
+
+A: All of them, as long as Python 3.8+ is installed.
+
+**Q: 端口被占用了怎么办？ / Port in use?**
+
+A: `PORT=8888 python3 app.py`
+
+## 许可证 · License
+
+[MIT](LICENSE) © 2026 xialin99
