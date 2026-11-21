@@ -8,7 +8,7 @@
 零依赖，只用 Python 标准库。启动后自动打开浏览器。
 数据全部留在本地，不上传任何服务器。
 """
-import os, sys, json, re, tempfile, threading, webbrowser
+import os, sys, json, tempfile, threading, webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -18,8 +18,6 @@ from analyze import headphone_sessions, watch_wear, summarize
 import render
 
 PORT = int(os.environ.get("PORT", 8765))
-UPLOAD_DIR = os.path.join(HERE, ".uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 STATE = {"status": "idle", "progress": "", "result": None, "error": ""}
 
@@ -35,8 +33,8 @@ def run_analysis(zip_path):
         wear = watch_wear(data["stand"])
         STATE["progress"] = "正在汇总…"
         result = summarize(sessions, wear)
-        if not result:
-            raise RuntimeError("没有找到耳机聆听记录")
+        if not sessions and not wear:
+            raise ValueError("没有找到支持的耳机或手表记录")
         STATE["result"] = result
         STATE["status"] = "done"
         STATE["progress"] = "完成"
@@ -44,6 +42,8 @@ def run_analysis(zip_path):
         STATE["status"] = "error"
         STATE["error"] = str(e)
         STATE["progress"] = "失败"
+    finally:
+        os.unlink(zip_path)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -55,6 +55,7 @@ class Handler(BaseHTTPRequestHandler):
             body = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -70,6 +71,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send(render.result_page(STATE["result"]))
         elif self.path == "/reset":
+            if STATE["status"] == "parsing":
+                self._send("请等待当前分析结束", code=409)
+                return
             STATE.update({"status": "idle", "progress": "", "result": None, "error": ""})
             self.send_response(302)
             self.send_header("Location", "/")
@@ -80,42 +84,58 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/upload":
             self._send("not found", code=404); return
-        ctype = self.headers.get("Content-Type", "")
-        m = re.search(r"boundary=(.+)", ctype)
-        if not m:
-            self._send("bad request", code=400); return
-        bnd = m.group(1).strip('"').encode()
-        clen = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(clen)
+        if STATE["status"] == "parsing":
+            self._send("请等待当前分析结束", code=409)
+            return
+        if self.headers.get("Content-Type") != "application/zip":
+            self._send("请选择 ZIP 文件", code=415)
+            return
+        try:
+            remaining = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            remaining = 0
+        if not 0 < remaining <= 2 * 1024**3:
+            self._send("ZIP 文件大小须在 0 至 2 GiB 之间", code=413)
+            return
         saved = None
-        for part in raw.split(b"--" + bnd):
-            if b"filename=" not in part:
-                continue
-            fn = re.search(rb'filename="([^"]+)"', part)
-            if not fn:
-                continue
-            name = os.path.basename(fn.group(1).decode("utf-8", "ignore"))
-            if not name.lower().endswith(".zip"):
-                continue
-            body = part.split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n", 1)[0]
-            path = os.path.join(UPLOAD_DIR, "health_export.zip")
-            with open(path, "wb") as f:
-                f.write(body)
-            saved = path
-        if not saved:
-            self._send("no zip", code=400); return
+        try:
+            self.connection.settimeout(30)
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as output:
+                saved = output.name
+                while remaining:
+                    block = self.rfile.read(min(remaining, 1024 * 1024))
+                    if not block:
+                        raise ValueError("上传中断，请重新选择文件")
+                    output.write(block)
+                    remaining -= len(block)
+        except (OSError, ValueError):
+            if saved:
+                os.unlink(saved)
+            self._send("未能接收完整 ZIP 文件", code=400)
+            return
         STATE.update({"status": "parsing", "progress": "开始处理", "result": None, "error": ""})
         threading.Thread(target=run_analysis, args=(saved,), daemon=True).start()
         self._send(json.dumps({"ok": True}), "application/json")
 
 
 def main():
-    url = "http://127.0.0.1:%d" % PORT
-    print("\n  HealthViz 已启动：%s" % url)
-    print("  数据全部在本地处理，不上传任何服务器\n")
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    try:
+        server = HTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError as error:
+        if error.errno not in (48, 98, 10048):
+            raise
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+    with server:
+        url = "http://127.0.0.1:%d/" % server.server_port
+        print("HealthViz: " + url, flush=True)
+        print("Keep this window open while using HealthViz. Press Ctrl+C to stop.", flush=True)
+        threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":
     main()
+

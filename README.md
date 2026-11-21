@@ -17,7 +17,6 @@
 
 ---
 
-![HealthViz 截图](docs/screenshots/result.jpg)
 
 ## 它做什么 · What it does
 
@@ -47,6 +46,8 @@ python3 app.py
 
 **English**：A URL is printed in the terminal and your browser opens automatically. Drop the health export zip onto the page and wait for parsing.
 
+Windows：解压项目后，在资源管理器中双击 **Start HealthViz.cmd**。它会寻找 Python 3.8+，启动服务并自动打开默认浏览器。使用时保留启动窗口。
+
 > 不需要 `pip install`，不需要 Docker，不需要数据库。Python 3.8+ 即可。
 > No `pip install`, no Docker, no database. Just Python 3.8+.
 
@@ -70,9 +71,9 @@ python3 app.py
 
 ## 数据安全 · Privacy
 
-**中文**：所有解析都在你的机器上完成。文件只存到临时目录，解析完立即删除。项目不发起任何网络请求（除了加载 ECharts 的 CDN）。
+**中文**：所有解析都在你的机器上完成。ZIP 暂存于系统临时目录，解析结束后删除。解析和图表绘制都在本机完成。
 
-**English**: All parsing happens on your machine. Files go to a temp directory and are deleted right after parsing. The project makes no network requests except loading ECharts from a CDN.
+**English**: All parsing happens on your machine. The uploaded ZIP is deleted after processing. Parsing and charts run locally without a CDN.
 
 **Why you can trust this**: the whole project is ~500 lines of standard-library Python. Read it yourself.
 
@@ -84,7 +85,6 @@ health-viz/
 ├── parser.py    # 解析 Apple Health XML           /  parse the XML
 ├── analyze.py   # 切分会话、统计佩戴               /  sessions & wear stats
 ├── render.py    # 生成 HTML                       /  HTML rendering
-├── docs/        # 截图                            /  screenshots
 ├── LICENSE      # MIT
 └── README.md
 ```
@@ -93,15 +93,15 @@ health-viz/
 
 **中文**
 
-**耳机聆听**：健康数据里每条 `HeadphoneAudioExposure` 记录带开始/结束时间。把相邻间隔 ≤ 2 分钟的记录合并成一次「聆听会话」，累加时长。
+**耳机聆听**：健康数据里每条 `HeadphoneAudioExposure` 记录带开始/结束时间。把相邻间隔 ≤ 2 分钟的记录合并成一次「聆听会话」，只累加有记录的时间，跨小时或午夜时分别汇总。
 
-**手表佩戴**：用 `AppleStandHour` 反推。Apple Watch 每个整点记录一次「站没站」，只有戴上才记录。**有记录的小时 = 戴了**。这比用心率判断更准。
+**手表佩戴**：用 `AppleStandHour` 反推。Apple Watch 每个整点记录一次「站没站」，只有戴上才记录。每个有记录的小时计为 1 个估算佩戴小时；缺少记录不能据此判断没戴。
 
 **English**
 
-**Headphone listening**: each `HeadphoneAudioExposure` record carries start/end times. Records with gaps ≤ 2 minutes are merged into one "listening session", then durations are summed.
+**Headphone listening**: each `HeadphoneAudioExposure` record carries start/end times. Records with gaps ≤ 2 minutes are merged into one "listening session", while only recorded intervals count toward duration. Time is split across hour and day boundaries.
 
-**Watch wearing**: derived from `AppleStandHour`. Apple Watch logs a stand/idle event at every hour — only when worn. **An hour with a record means the watch was on the wrist.** This is more reliable than inferring from heart rate.
+**Watch wearing**: derived from `AppleStandHour`. Apple Watch logs a stand/idle event at every hour — only when worn. Each hour containing a record counts as one estimated wear hour. Missing records do not establish that the watch was off the wrist.
 
 ## 支持的数据类型 · Supported data
 
@@ -132,8 +132,15 @@ A: All of them, as long as Python 3.8+ is installed.
 
 **Q: 端口被占用了怎么办？ / Port in use?**
 
-A: `PORT=8888 python3 app.py`
+Windows PowerShell:
+
+```powershell
+$env:PORT = '8888'
+python app.py
+```
+
+macOS/Linux: `PORT=8888 python3 app.py`
 
 ## 许可证 · License
 
-[MIT](LICENSE) © 2026 xialin99
+[MIT](LICENSE) © 2026 forest
