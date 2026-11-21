@@ -35,6 +35,7 @@ def metric_value(name, number, unit):
     return f"{value} {label}".rstrip()
 
 STYLE = """
+.body-date{display:grid;gap:16px}.body-date-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px}.body-date-form label{display:grid;gap:5px;color:var(--ink);font-weight:700;font-size:.9rem}.body-date-form input,.body-date-form button{min-height:46px;border-radius:10px;font:inherit;padding:9px 14px}.body-date-form input{min-width:12rem;background:#f7faf7;border:1px solid var(--line);color:var(--ink)}.body-date-form button{background:var(--green);border:1px solid var(--green);color:#fff;font-weight:700;cursor:pointer}.body-date-form button:hover{background:#103d31}.body-date-form :focus-visible,.body-recent a:focus-visible{outline:2px solid var(--green);outline-offset:3px}.body-recent{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.body-recent a{padding:6px 11px;border-radius:999px;background:#edf5ee;color:var(--green);font-size:.85rem;text-decoration:none}.body-recent a:hover{background:#dcece1}@media(max-width:420px){.body-date-form label,.body-date-form button{width:100%}.body-date-form input{width:100%;min-width:0}}
 .detail-nav.modules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 28px;gap:10px}
 .detail-nav.modules a{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;min-height:64px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);text-decoration:none}
 .modules a:hover,.modules a:active{background:#e8f2ea;border-color:#8bac98}
@@ -248,15 +249,21 @@ def result_page(report):
         parts.append('<p class="muted">每个有站立记录的小时算作 1 小时。灰色表示缺少记录，无法判断当时是否佩戴。</p>')
     else:
         parts.append('<p class="panel muted">这份导出没有可用于估算佩戴的站立记录。</p>')
-    dates = sorted(report.get("details", {}))
+    dates = sorted(day for day, detail in report.get("details", {}).items() if detail.get("body"))
     parts.append('</section><section class="dashboard" id="body"><h2>身体状态</h2>')
     if dates:
-        options = ''.join(f'<option>{day}</option>' for day in reversed(dates))
-        parts.append('<div class="panel"><form action="/day" method="get">'
-                     f'<label>日期 <select name="date">{options}</select></label> '
-                     '<button type="submit">查看当天详情</button></form></div>')
+        recent = []
+        for day in reversed(dates[-3:]):
+            parsed = date.fromisoformat(day)
+            recent.append(f'<a href="/day/{day}" aria-label="{day} 当天详情">{parsed.month} 月 {parsed.day} 日</a>')
+        parts.append('<div class="panel body-date">'
+                     f'<form class="body-date-form" action="/day" method="get" data-dates="{" ".join(dates)}">'
+                     f'<label>选择日期<input type="date" name="date" min="{dates[0]}" max="{dates[-1]}" '
+                     f'value="{dates[-1]}" required></label><button type="submit">查看当天详情 →</button></form>'
+                     '<div class="body-recent"><span class="muted">最近有记录</span>'
+                     + ''.join(recent) + '</div></div>')
     else:
-        parts.append('<p class="panel muted">这份导出没有可查看的日期。</p>')
+        parts.append('<p class="panel muted">这份导出没有可查看的身体状态记录。</p>')
     parts.append("""</section><script>
 const saved = history.state && history.state.overview;
 const years = [...document.querySelectorAll('details.year')];
@@ -272,10 +279,24 @@ function rememberOverview() {
 }
 document.addEventListener('click', event => {
     const cell = event.target.closest('.cell');
-    if (cell?.matches('a')) rememberOverview();
+    if (cell?.matches('a') || event.target.closest('.body-recent a')) rememberOverview();
     else if (cell) cell.closest('.heat').querySelector('.readout').textContent = cell.getAttribute('aria-label');
 });
-document.querySelector('#body form')?.addEventListener('submit', rememberOverview);
+const bodyForm = document.querySelector('.body-date-form');
+if (bodyForm) {
+    const field = bodyForm.elements.date;
+    const available = new Set(bodyForm.dataset.dates.split(' '));
+    field.addEventListener('input', () => field.setCustomValidity(''));
+    bodyForm.addEventListener('submit', event => {
+        if (!available.has(field.value)) {
+            event.preventDefault();
+            field.setCustomValidity('这一天没有身体状态记录，请选择其他日期。');
+            field.reportValidity();
+            return;
+        }
+        rememberOverview();
+    });
+}
 </script>""")
     return page("健康数据概览", ''.join(parts))
 
