@@ -25,7 +25,10 @@
 从 iPhone 健康 App 导出的数据里，提取并可视化：
 
 - **耳机聆听** — 每天听了多久、什么时候听、单次最长多久、一个月里哪几天在听
-- **手表佩戴** — 每天戴了几小时、累计戴了多久、哪些天没戴
+- **手表佩戴估算** — 根据站立记录查看每天哪些小时有记录，以及当天的锻炼与身体状态
+- **身体状态** — 按天展开导出中可用的心率、步数、睡眠、活动能量、体重等指标
+
+点每日热力图中的日期可展开当天详情。三个模块共用「详情日期」。耳机显示推算出的聆听起止，手表显示有站立记录的小时范围。多个设备的步数等累计值按来源分别显示，避免重复相加。
 
 **English**
 
@@ -84,6 +87,7 @@ health-viz/
 ├── app.py       # HTTP 服务、文件上传、任务调度  /  server, upload, dispatch
 ├── parser.py    # 解析 Apple Health XML           /  parse the XML
 ├── analyze.py   # 切分会话、统计佩戴               /  sessions & wear stats
+├── details.py   # 按天整理设备时间线和身体指标      /  daily details
 ├── render.py    # 生成 HTML                       /  HTML rendering
 ├── LICENSE      # MIT
 └── README.md

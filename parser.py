@@ -17,6 +17,16 @@ from xml.etree import ElementTree as ET
 TYPES = {
     "HKQuantityTypeIdentifierHeadphoneAudioExposure": "headphone",
     "HKCategoryTypeIdentifierAppleStandHour": "stand",
+    "HKCategoryTypeIdentifierSleepAnalysis": "sleep",
+    "HKWorkoutTypeIdentifier": "workout",
+    **{
+        "HKQuantityTypeIdentifier" + name: name
+        for name in (
+            "HeartRate", "RestingHeartRate", "StepCount", "DistanceWalkingRunning",
+            "ActiveEnergyBurned", "AppleExerciseTime", "BodyMass", "RespiratoryRate",
+            "OxygenSaturation", "HeartRateVariabilitySDNN",
+        )
+    },
 }
 
 
@@ -68,10 +78,17 @@ def parse(zip_path, progress=None):
                 if depth != 1:
                     continue
                 kind = TYPES.get(element.get("type")) if element.tag == "Record" else None
+                if element.tag == "Workout":
+                    kind = "workout"
                 if kind:
                     start, end = _dt(element.get("startDate")), _dt(element.get("endDate"))
                     if start and end:
-                        out[kind].append([start.isoformat(), end.isoformat(), element.get("value")])
+                        record = [start.isoformat(), end.isoformat(), element.get("value")]
+                        if kind not in ("headphone", "stand"):
+                            record.extend([element.get("unit"), element.get("sourceName")])
+                        if kind == "workout":
+                            record[2] = element.get("workoutActivityType")
+                        out[kind].append(record)
                 root.remove(element)
                 count += 1
                 if progress and count % 500000 == 0:

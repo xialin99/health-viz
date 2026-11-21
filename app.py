@@ -15,6 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from parser import parse
 from analyze import headphone_sessions, watch_wear, summarize
+from details import daily_details
 import render
 
 PORT = int(os.environ.get("PORT", 8765))
@@ -33,8 +34,9 @@ def run_analysis(zip_path):
         wear = watch_wear(data["stand"])
         STATE["progress"] = "正在汇总…"
         result = summarize(sessions, wear)
-        if not sessions and not wear:
-            raise ValueError("没有找到支持的耳机或手表记录")
+        result["details"] = daily_details(data, sessions, wear)
+        if not result["details"]:
+            raise ValueError("没有找到支持的耳机、手表或身体状态记录")
         STATE["result"] = result
         STATE["status"] = "done"
         STATE["progress"] = "完成"
