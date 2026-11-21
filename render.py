@@ -2,9 +2,9 @@
 from html import escape
 from calendar import Calendar
 from datetime import date
-import json
 
 STYLE = """
+.days a.cell{display:grid;place-items:center;text-decoration:none}.day-back{display:inline-block;margin-bottom:16px;color:var(--green);font-weight:700}.day-detail{margin-top:18px}.day-detail .panel h2{margin-bottom:6px}
 .detail-nav{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}.detail-nav a{color:var(--green)}.daily-select{margin:0 0 20px}.daily-select input{font:inherit;margin-left:8px}.daily-detail{border-top:1px solid var(--line);padding:12px 0}.daily-detail summary,.metric-detail summary{cursor:pointer;color:var(--green);font-weight:700}.detail-group{display:grid;gap:8px}.metric-detail{padding:8px 0;border-bottom:1px solid var(--line)}.day-track{height:12px;position:relative;background:#e7ede8;border-radius:6px;margin-top:12px}.day-track i{position:absolute;height:100%;background:var(--green);border-radius:6px}.day-axis{display:flex;justify-content:space-between;color:var(--muted);font-size:.78rem}
 .dashboard{display:grid;gap:18px}.dash-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.dash-head h2{margin:0}.months{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.month{padding:12px;background:#f7faf7;border:1px solid var(--line);border-radius:12px}.month h4{margin:0 0 8px}.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}.days span{font-size:.68rem;color:var(--muted)}.cell{aspect-ratio:1;border:0;border-radius:4px;padding:0;background:var(--tone,#e7ede8);color:#203e34;font:inherit;font-size:.68rem;cursor:pointer}.cell[data-level="4"],.cell[data-level="5"]{color:white}.cell:hover{outline:2px solid #182c26}.year{margin:12px 0}.year summary{cursor:pointer;font-weight:800;padding:8px 0}.legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:.82rem;color:var(--muted)}.swatch{width:13px;height:13px;border-radius:3px;background:var(--tone)}.readout{display:block;min-height:1.8em;color:var(--green);font-weight:700;margin:8px 0}.matrix-wrap{overflow:auto}.matrix{min-width:660px;display:grid;grid-template-columns:2.6rem repeat(24,minmax(0,1fr));gap:3px;align-items:center;text-align:center;font-size:.68rem}.matrix .cell{width:100%}.stat strong{overflow-wrap:anywhere}@media(max-width:950px){.months{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:680px){.months{grid-template-columns:repeat(2,minmax(0,1fr))}.month{padding:8px}.days{gap:2px}}@media(max-width:350px){.months{grid-template-columns:1fr}}
 
@@ -109,9 +109,10 @@ def cell(label, value, limits, unit, face="", day=""):
     level = 0 if value is None else 1 + sum(value >= limit for limit in limits)
     detail = f"{label} · {value:g} {unit}" if value is not None else f"{label} · 无记录"
     safe = escape(detail, quote=True)
-    day_attr = f' data-day="{day}"' if day else ""
-    return (f'<button class="cell" type="button" data-level="{level}"{day_attr} '
-            f'style="--tone:{COLORS[level]}" title="{safe}" aria-label="{safe}">{face}</button>')
+    attrs = f'class="cell" data-level="{level}" style="--tone:{COLORS[level]}" title="{safe}" aria-label="{safe}"'
+    if day:
+        return f'<a {attrs} href="/day/{day}">{face}</a>'
+    return f'<button {attrs} type="button">{face}</button>'
 
 
 def legend(limits, unit):
@@ -129,7 +130,7 @@ def calendar_map(rows, key, unit, limits):
     first, last = min(values), max(values)
     content = ['<div class="panel heat"><div class="dash-head"><h3>每日热力图</h3>'
                f'<span class="muted">{first} 至 {last}</span></div>',
-               legend(limits, unit), '<output class="readout" aria-live="polite">点选一天查看数值</output>']
+               legend(limits, unit), '<output class="readout">点选一天查看当天详情</output>']
     for year in range(last.year, first.year - 1, -1):
         start = first.month if year == first.year else 1
         end = last.month if year == last.year else 12
@@ -161,18 +162,12 @@ def rhythm(matrix):
             + '<div class="matrix-wrap"><div class="matrix"><span></span>' + labels + ''.join(rows) + '</div></div></div>')
 
 
-def day_panel(kind):
-    return (f'<details class="panel daily-detail" data-kind="{kind}">'
-            '<summary>查看详情</summary><div class="detail-group"></div></details>')
-
-
 def result_page(report):
     listening, watch = report["listen"], report["watch"]
     parts = ['<div class="hero"><small>Apple 健康导入结果</small><h1>健康数据概览</h1>'
              '<p>用颜色找到活跃的日子，再点开查看具体时长。</p></div>'
              '<nav class="detail-nav" aria-label="健康数据模块"><a href="#audio">耳机</a>'
              '<a href="#watch">手表</a><a href="#body">身体状态</a></nav>'
-             '<label class="daily-select">详情日期<input type="date" id="detail-day"></label>'
              '<section class="dashboard" id="audio"><h2>耳机聆听</h2>']
     if listening["byDay"]:
         peak = listening["maxDay"]
@@ -190,7 +185,6 @@ def result_page(report):
             ("会话记录平均值超过 80 dB", f'{listening["highDbSessions"]:,} 次'),
         ]))
         parts.append(calendar_map(listening["byDay"], "min", "分钟", (15, 30, 60, 120)))
-        parts.append(day_panel("audio"))
         parts.append(rhythm(listening["byWeekHour"]))
     else:
         parts.append('<p class="panel muted">这份导出没有可统计的耳机聆听记录。</p>')
@@ -205,109 +199,100 @@ def result_page(report):
         parts.append('<p class="muted">每个有站立记录的小时算作 1 小时。灰色表示缺少记录，无法判断当时是否佩戴。</p>')
     else:
         parts.append('<p class="panel muted">这份导出没有可用于估算佩戴的站立记录。</p>')
-    parts.append(day_panel("watch"))
-    parts.append('</section><section class="dashboard" id="body"><h2>身体状态</h2><div class="panel detail-group" id="body-metrics"></div></section>')
-    payload = json.dumps(report.get("details", {}), ensure_ascii=True).replace("<", "\\u003c")
-    parts.append(f'<script type="application/json" id="daily-data">{payload}</script>')
-    parts.append("""<script>
-const days = JSON.parse(document.getElementById('daily-data').textContent);
-const dates = Object.keys(days).sort();
-const picker = document.getElementById('detail-day');
-const metricNames = [...new Set(Object.values(days).flatMap(day => Object.keys(day.body)))];
-picker.value = dates[dates.length - 1] || '';
-function element(tag, text) {
-    const node = document.createElement(tag);
-    node.textContent = text;
-    return node;
+    dates = sorted(report.get("details", {}))
+    parts.append('</section><section class="dashboard" id="body"><h2>身体状态</h2>')
+    if dates:
+        options = ''.join(f'<option>{day}</option>' for day in reversed(dates))
+        parts.append('<div class="panel"><form action="/day" method="get">'
+                     f'<label>日期 <select name="date">{options}</select></label> '
+                     '<button type="submit">查看当天详情</button></form></div>')
+    else:
+        parts.append('<p class="panel muted">这份导出没有可查看的日期。</p>')
+    parts.append("""</section><script>
+const saved = history.state && history.state.overview;
+const years = [...document.querySelectorAll('details.year')];
+if (saved) {
+    years.forEach((year, index) => { year.open = saved.openYears.includes(index); });
+    requestAnimationFrame(() => window.scrollTo(0, saved.scroll));
 }
-function timeline(ranges) {
-    const chart = element('div', '');
-    chart.setAttribute('aria-hidden', 'true');
-    const track = element('div', '');
-    track.className = 'day-track';
-    for (const [start, end] of ranges) {
-        const bar = element('i', '');
-        bar.style.left = (start / 24 * 100) + '%';
-        bar.style.width = ((end - start) / 24 * 100) + '%';
-        track.append(bar);
-    }
-    const axis = element('div', '');
-    axis.className = 'day-axis';
-    for (const hour of ['00:00', '06:00', '12:00', '18:00', '24:00']) axis.append(element('span', hour));
-    chart.append(track, axis);
-    return chart;
+function rememberOverview() {
+    history.replaceState({overview: {
+        openYears: years.flatMap((year, index) => year.open ? [index] : []),
+        scroll: window.scrollY
+    }}, '');
 }
-function decimalHour(time) {
-    const [hours, minutes, seconds] = time.split(':').map(Number);
-    return hours + minutes / 60 + seconds / 3600;
-}
-function metrics(container, body, names) {
-    const expanded = new Set([...container.querySelectorAll('details[open]')].map(item => item.dataset.metric));
-    container.replaceChildren();
-    for (const name of names) {
-        const readings = body[name] || [];
-        const entry = element('details', '');
-        entry.className = 'metric-detail';
-        entry.dataset.metric = name;
-        entry.open = expanded.has(name);
-        const preview = readings.length === 1 ? readings[0].slice(1, 3).join(' ') :
-            readings.length ? '按来源查看' : '当天无记录';
-        entry.append(element('summary', name + ' · ' + preview));
-        for (const [method, number, unit, source, count] of readings) {
-            entry.append(element('div', [method, number + ' ' + unit, source && source + '（' + count + ' 条记录）'].filter(Boolean).join(' · ')));
-        }
-        if (!readings.length) entry.append(element('div', '所选日期没有这项记录'));
-        container.append(entry);
-    }
-    if (!names.length) container.append(element('p', '这份导出没有可展示的身体状态记录。'));
-}
-function showDay() {
-    const day = days[picker.value] || {audio: [], watch: [], body: {}, workouts: []};
-    document.querySelectorAll('.daily-detail').forEach(panel => {
-        const content = panel.querySelector('.detail-group');
-        content.replaceChildren(element('strong', picker.value || '请选择日期'));
-        if (panel.dataset.kind === 'audio') {
-            content.append(element('div', '以下为聆听记录推算的时段。记录中的短间隔可能属于同一会话。'));
-            if (day.audio.length) content.append(timeline(day.audio.map(([start, end]) => [decimalHour(start), decimalHour(end)])));
-            for (const [start, end, minutes] of day.audio) {
-                content.append(element('div', start + ' 至 ' + end + ' · 记录 ' + minutes + ' 分钟'));
-            }
-            if (!day.audio.length) content.append(element('div', '当天没有聆听记录。'));
-        } else {
-            content.append(element('div', '整点范围代表有站立记录的小时，空白时段的佩戴状态未知。'));
-            if (day.watch.length) content.append(timeline(day.watch));
-            for (const [start, end] of day.watch) {
-                const hour = value => String(value).padStart(2, '0') + ':00';
-                content.append(element('div', hour(start) + ' 至 ' + hour(end) + ' · 有记录'));
-            }
-            if (!day.watch.length) content.append(element('div', '当天没有站立记录。'));
-            const workout = element('details', '');
-            workout.append(element('summary', '锻炼记录 · ' + day.workouts.length + ' 次'));
-            for (const [start, end, kind, source] of day.workouts) {
-                workout.append(element('div', [start + ' 至 ' + end, kind.replace(/^HKWorkoutActivityType/, ''), source].filter(Boolean).join(' · ')));
-            }
-            content.append(workout, element('strong', '当天身体状态'));
-            const summary = element('div', '');
-            metrics(summary, day.body, ['静息心率', '步数', '睡眠'].filter(name => day.body[name]));
-            content.append(summary);
-        }
-    });
-    metrics(document.getElementById('body-metrics'), day.body, metricNames);
-}
-picker.addEventListener('change', showDay);
-showDay();
-document.querySelectorAll('.heat').forEach(panel => {
-    panel.addEventListener('click', event => {
-        const button = event.target.closest('.cell');
-        if (!button) return;
-        panel.querySelector('.readout').textContent = button.getAttribute('aria-label');
-        if (button.dataset.day) {
-            picker.value = button.dataset.day;
-            showDay();
-            const detail = panel.parentElement.querySelector('.daily-detail');
-            if (detail) detail.open = true;
-        }
-    });
+document.addEventListener('click', event => {
+    const cell = event.target.closest('.cell');
+    if (cell?.matches('a')) rememberOverview();
+    else if (cell) cell.closest('.heat').querySelector('.readout').textContent = cell.getAttribute('aria-label');
 });
+document.querySelector('#body form')?.addEventListener('submit', rememberOverview);
 </script>""")
     return page("健康数据概览", ''.join(parts))
+
+
+def _hour(time):
+    hours, minutes, seconds = map(int, time.split(":"))
+    return hours + minutes / 60 + seconds / 3600
+
+
+def _timeline(ranges):
+    bars = ''.join(f'<i style="left:{start / 24:.4%};width:{(end - start) / 24:.4%}"></i>'
+                   for start, end in ranges)
+    return ('<div aria-hidden="true"><div class="day-track">' + bars +
+            '</div><div class="day-axis"><span>00:00</span><span>06:00</span>'
+            '<span>12:00</span><span>18:00</span><span>24:00</span></div></div>')
+
+
+def day_page(report, day):
+    data = report.get("details", {}).get(day, {})
+    audio, watch = data.get("audio", []), data.get("watch", [])
+    workouts, body = data.get("workouts", []), data.get("body", {})
+    parts = [
+        '<a class="day-back" id="day-back" href="/result">← 返回健康数据概览</a>',
+        f'<div class="hero"><small>当天详情</small><h1>{escape(day)}</h1></div>',
+        '<div class="dashboard day-detail">',
+        '<section class="panel detail-group"><h2>耳机聆听</h2>',
+    ]
+    if audio:
+        parts.append('<p class="muted">按聆听记录推算起止。短间隔可能并入同一会话。</p>')
+        parts.append(_timeline((_hour(start), _hour(end)) for start, end, _ in audio))
+        parts.extend(f'<div>{start} 至 {end} · 记录 {minutes:g} 分钟</div>' for start, end, minutes in audio)
+    else:
+        parts.append('<p class="muted">当天没有聆听记录。</p>')
+    parts.append('</section><section class="panel detail-group"><h2>Apple Watch</h2>')
+    if watch:
+        parts.append('<p class="muted">整点范围表示有站立记录。空白时段的佩戴状态未知。</p>')
+        parts.append(_timeline(watch))
+        parts.extend(f'<div>{start:02d}:00 至 {end:02d}:00 · 有记录</div>' for start, end in watch)
+    else:
+        parts.append('<p class="muted">当天没有站立记录。</p>')
+    parts.append(f'<details class="metric-detail"><summary>锻炼记录 · {len(workouts)} 次</summary>')
+    for start, end, kind, source in workouts:
+        label = kind[len("HKWorkoutActivityType"):] if kind.startswith("HKWorkoutActivityType") else kind
+        row = " · ".join(piece for piece in (f"{start} 至 {end}", label, source) if piece)
+        parts.append(f'<div>{escape(row)}</div>')
+    if not workouts:
+        parts.append('<div>当天没有独立的锻炼记录。</div>')
+    parts.append('</details></section><section class="panel detail-group"><h2>身体状态</h2>')
+    for name, readings in body.items():
+        preview = f'{readings[0][1]:g} {readings[0][2]}' if len(readings) == 1 else "按来源查看"
+        parts.append(f'<details class="metric-detail"><summary>{escape(name)} · {escape(preview)}</summary>')
+        for method, number, unit, source, count in readings:
+            row = f"{method} · {number:g} {unit}".rstrip()
+            if source:
+                row += f" · {source}（{count} 条记录）"
+            parts.append(f'<div>{escape(row)}</div>')
+        parts.append('</details>')
+    if not body:
+        parts.append('<p class="muted">当天没有可展示的身体状态记录。</p>')
+    parts.append("""</section></div><script>
+document.getElementById('day-back').addEventListener('click', event => {
+    if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey &&
+        document.referrer === location.origin + '/result' && history.length > 1) {
+        event.preventDefault();
+        history.back();
+    }
+});
+</script>""")
+    return page(f"{day} · 当天详情", ''.join(parts))

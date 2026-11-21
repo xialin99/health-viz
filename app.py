@@ -9,6 +9,8 @@
 数据全部留在本地，不上传任何服务器。
 """
 import os, sys, json, tempfile, threading, webbrowser
+from datetime import date
+from urllib.parse import parse_qs, urlsplit
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +74,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send("<h1>还没有数据</h1><a href='/'>返回</a>", code=404)
             else:
                 self._send(render.result_page(STATE["result"]))
+        elif self.path.startswith(("/day/", "/day?")):
+            report = STATE["result"]
+            path = urlsplit(self.path)
+            raw_day = (parse_qs(path.query).get("date", [""])[0]
+                       if path.path == "/day" else path.path[len("/day/"):])
+            try:
+                day = date.fromisoformat(raw_day).isoformat()
+            except ValueError:
+                day = None
+            if report is None or day != raw_day:
+                self._send("<h1>无法打开当天详情</h1><a href='/'>返回导入</a>", code=404)
+            else:
+                self._send(render.day_page(report, day))
         elif self.path == "/reset":
             if STATE["status"] == "parsing":
                 self._send("请等待当前分析结束", code=409)
