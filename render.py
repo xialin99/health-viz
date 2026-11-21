@@ -35,6 +35,16 @@ def metric_value(name, number, unit):
     return f"{value} {label}".rstrip()
 
 STYLE = """
+.detail-nav.modules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 28px;gap:10px}
+.detail-nav.modules a{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;min-height:64px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);text-decoration:none}
+.modules a:hover,.modules a:active{background:#e8f2ea;border-color:#8bac98}
+.modules a:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.modules .module-label{display:grid;gap:1px;line-height:1.4}
+.modules .module-label strong{font-size:.96rem}
+.modules .module-label small{font-size:.76rem;color:var(--muted)}
+.modules .module-arrow{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;background:#edf5ee;color:var(--green);font-size:1rem}
+@media(max-width:560px){.detail-nav.modules a{padding:10px;align-items:flex-start;min-height:68px}.modules .module-arrow{display:none}}
+@media(max-width:360px){.detail-nav.modules{grid-template-columns:1fr}.detail-nav.modules a{min-height:48px}.modules .module-arrow{display:grid}}
 .days a.cell{display:grid;place-items:center;text-decoration:none}.day-back{display:inline-block;margin-bottom:16px;color:var(--green);font-weight:700}.day-detail{margin-top:18px}.day-detail .panel h2{margin-bottom:6px}
 .detail-nav{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}.detail-nav a{color:var(--green)}.daily-select{margin:0 0 20px}.daily-select input{font:inherit;margin-left:8px}.daily-detail{border-top:1px solid var(--line);padding:12px 0}.daily-detail summary,.metric-detail summary{cursor:pointer;color:var(--green);font-weight:700}.detail-group{display:grid;gap:8px}.metric-detail{padding:8px 0;border-bottom:1px solid var(--line)}.day-track{height:12px;position:relative;background:#e7ede8;border-radius:6px;margin-top:12px}.day-track i{position:absolute;height:100%;background:var(--green);border-radius:6px}.day-axis{display:flex;justify-content:space-between;color:var(--muted);font-size:.78rem}
 .dashboard{display:grid;gap:18px}.dash-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.dash-head h2{margin:0}.months{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.month{padding:12px;background:#f7faf7;border:1px solid var(--line);border-radius:12px}.month h4{margin:0 0 8px}.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}.days span{font-size:.68rem;color:var(--muted)}.cell{aspect-ratio:1;border:0;border-radius:4px;padding:0;background:var(--tone,#e7ede8);color:#203e34;font:inherit;font-size:.68rem;cursor:pointer}.cell[data-level="4"],.cell[data-level="5"]{color:white}.cell:hover{outline:2px solid #182c26}.year{margin:12px 0}.year summary{cursor:pointer;font-weight:800;padding:8px 0}.legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:.82rem;color:var(--muted)}.swatch{width:13px;height:13px;border-radius:3px;background:var(--tone)}.readout{display:block;min-height:1.8em;color:var(--green);font-weight:700;margin:8px 0}.matrix-wrap{overflow:auto}.matrix{min-width:660px;display:grid;grid-template-columns:2.6rem repeat(24,minmax(0,1fr));gap:3px;align-items:center;text-align:center;font-size:.68rem}.matrix .cell{width:100%}.stat strong{overflow-wrap:anywhere}@media(max-width:950px){.months{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:680px){.months{grid-template-columns:repeat(2,minmax(0,1fr))}.month{padding:8px}.days{gap:2px}}@media(max-width:350px){.months{grid-template-columns:1fr}}
@@ -195,10 +205,18 @@ def rhythm(matrix):
 
 def result_page(report):
     listening, watch = report["listen"], report["watch"]
+    links = ''.join(
+        f'<a href="#{target}"><span class="module-label"><strong>{label}</strong><small>{description}</small></span>'
+        '<span class="module-arrow" aria-hidden="true">↓</span></a>'
+        for target, label, description in (
+            ("audio", "耳机", "聆听时长与节奏"),
+            ("watch", "手表", "佩戴记录热力图"),
+            ("body", "身体状态", "心率、步数与睡眠"),
+        )
+    )
     parts = ['<div class="hero"><small>Apple 健康导入结果</small><h1>健康数据概览</h1>'
              '<p>用颜色找到活跃的日子，再点开查看具体时长。</p></div>'
-             '<nav class="detail-nav" aria-label="健康数据模块"><a href="#audio">耳机</a>'
-             '<a href="#watch">手表</a><a href="#body">身体状态</a></nav>'
+             f'<nav class="detail-nav modules" aria-label="健康数据模块">{links}</nav>'
              '<section class="dashboard" id="audio"><h2>耳机聆听</h2>']
     if listening["byDay"]:
         peak = listening["maxDay"]
